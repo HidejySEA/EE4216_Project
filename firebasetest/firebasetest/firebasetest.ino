@@ -3,10 +3,11 @@
 #include <Firebase_ESP_Client.h>
 #include <DHT.h>
 #include "time.h"
-#include <esp_now.h>
+#include <HTTPClient.h>
 
-// ESP32-CAM server IP for taking photo (not used with ESP-NOW)
-// const char* serverName = "http://172.20.10.7/take_photo?trigger=EE4216";
+// ESP32-CAM server IP for taking photo
+const char* serverName = "http://172.20.10.7/take_photo?trigger=EE4216";
+
 
 // Include the token generation process and RTDB helper.
 #include "addons/TokenHelper.h"
@@ -45,35 +46,21 @@ String pirPath = "/pir";
 String timePath = "/timestamp";
 
 // Sensor pins
-#define DHTPIN 4       // DHT22 sensor pin
-#define DHTTYPE DHT11  // DHT sensor type
-#define PIRPIN 5       // PIR sensor pin
-#define MQ2PIN 13      // MQ2 gas sensor pin (Analog)
-#define FLAMEPIN 16    // Flame sensor digital pin
-#define MICPIN 10      // Microphone digital pin
+#define DHTPIN 4         // DHT22 sensor pin
+#define DHTTYPE DHT11    // DHT sensor type
+#define PIRPIN 5         // PIR sensor pin
+#define MQ2PIN 13        // MQ2 gas sensor pin (Analog)                                                                                                                                                                                                                                                                       
+#define FLAMEPIN 16      // Flame sensor digital  pin
+#define MICPIN 10      // Microphone  digital pin
 
 DHT dht(DHTPIN, DHTTYPE);
 
-// ESP-NOW structure to send alert data
-typedef struct struct_alert {
-  bool flameDetected;
-  bool takePhoto;
-} struct_alert;
-
-struct_alert alertToSend;  // Create an instance of the alert structure
-
-// REPLACE WITH YOUR RECEIVER MAC Address
-uint8_t alertReceiverAddress[] = {0x08, 0xd1, 0xf9, 0x97, 0x6d, 0x14};  // Replace with your receiver's MAC address
-
-// Callback function to get the status of transmitted packets
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("Last Packet Send Status: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-}
-
 // Timer variables
 unsigned long sendDataPrevMillis = 0;
-unsigned long timerDelay = 10000;  // 10 seconds
+unsigned long timerDelay = 10000;  // 3 minutes
+
+// Firebase Cloud Messaging variables
+String camModuleUrl = "http://<ESP32-CAM-IP>/capture";  // URL of the ESP32-CAM module for capturing photos
 
 // Initialize WiFi
 void initWiFi() {
@@ -91,7 +78,7 @@ unsigned long getTime() {
   time_t now;
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
-    return 0;
+    return (0);
   }
   time(&now);
   return now;
@@ -105,68 +92,38 @@ void initSensors() {
   pinMode(MICPIN, INPUT);
 }
 
-// Initialize ESP-NOW
-void initESPNow() {
-  // Set device as a Wi-Fi Station
-  WiFi.mode(WIFI_STA);
-
-  // Init ESP-NOW
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
-
-  // Register the send callback
-  esp_now_register_send_cb(OnDataSent);
-
-  // Register peer
-  esp_now_peer_info_t peerInfo;
-  memcpy(peerInfo.peer_addr, alertReceiverAddress, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-
-  // Add peer
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    Serial.println("Failed to add peer");
-    return;
-  }
-}
-
-// Function to send alert to another ESP32 using ESP-NOW
 void sendTeleAlert() {
-  // Set alert details
-  alertToSend.flameDetected = true;
-  alertToSend.takePhoto = false;
 
-  // Send alert data via ESP-NOW
-  esp_err_t result = esp_now_send(alertReceiverAddress, (uint8_t *) &alertToSend, sizeof(alertToSend));
-
-  if (result == ESP_OK) {
-    Serial.println("Flame/Smoke alert sent successfully via ESP-NOW.");
+  HTTPClient http;
+  http.begin(serverName);
+  int httpResponseCode = http.GET();  // Send the request
+  if (httpResponseCode > 0) {
+    Serial.println("Flame/Smoke alert sent successfully.");
   } else {
-    Serial.println("Error sending flame/smoke alert via ESP-NOW.");
+    Serial.println("Error sending flame/smoke alert.");
   }
+  http.end();
 }
 
+// Function to send alert to ESP32-CAM
 void sendCamAlert() {
-  // Set alert details
-  alertToSend.flameDetected = false;
-  alertToSend.takePhoto = true;
 
-  // Send alert data via ESP-NOW
-  esp_err_t result = esp_now_send(alertReceiverAddress, (uint8_t *) &alertToSend, sizeof(alertToSend));
-
-  if (result == ESP_OK) {
-    Serial.println("Photo alert sent successfully via ESP-NOW.");
+  HTTPClient http;
+  http.begin(serverName);
+  
+  int httpResponseCode = http.GET();  // Send the request
+  if (httpResponseCode > 0) {
+    Serial.println("Photo taken successfully.");
   } else {
-    Serial.println("Error sending photo alert via ESP-NOW.");
+    Serial.println("Error taking photo.");
   }
+  
+  http.end();
 }
 
 void setup() {
   Serial.begin(115200);
   initWiFi();
-  initESPNow();
   initSensors();
 
   configTime(0, 0, "pool.ntp.org");
@@ -176,12 +133,11 @@ void setup() {
   auth.user.email = USER_EMAIL;
   auth.user.password = USER_PASSWORD;
   config.database_url = DATABASE_URL;
-  config.token_status_callback = tokenStatusCallback;
-
-  // Assign smaller response size if possible
-  fbdo.setResponseSize(256);
 
   Firebase.reconnectWiFi(true);
+  fbdo.setResponseSize(4096);
+  config.token_status_callback = tokenStatusCallback;
+
   Firebase.begin(&config, &auth);
 
   // Wait for user UID
@@ -193,10 +149,16 @@ void setup() {
   // Set user UID and database path
   uid = auth.token.uid.c_str();
   databasePath = "/UsersData/" + uid + "/readings";
+  
+  // // Set PIR sensor pin as wake-up source and enter deep sleep
+  // esp_sleep_enable_ext0_wakeup((gpio_num_t)PIR_PIN, HIGH);  // Wake up on PIR HIGH signal
+  // Serial.println("Entering deep sleep...");
+  // delay(100);  // Allow some time for serial output to complete
+  // esp_deep_sleep_start();  // Enter deep sleep mode
 }
 
 void loop() {
-  // Send new readings every 10 seconds
+  // Send new readings every 3 minutes
   if (Firebase.ready() && (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0)) {
     sendDataPrevMillis = millis();
 
@@ -206,7 +168,7 @@ void loop() {
     // Read sensor data
     float temperature = dht.readTemperature();
     float humidity = dht.readHumidity();
-    int gasLevel = analogRead(MQ2PIN);          // Read gas level from MQ2
+    int gasLevel = analogRead(MQ2PIN);  // Read gas level from MQ2
     int flameDetected = digitalRead(FLAMEPIN);  // Read flame sensor state
     int soundDetected = digitalRead(MICPIN);    // Read microphone state
     int motionDetected = digitalRead(PIRPIN);   // Read PIR sensor state
@@ -219,7 +181,7 @@ void loop() {
     json.set(flamePath.c_str(), flameDetected ? "Flame Detected" : "No Flame");
     json.set(soundPath.c_str(), soundDetected ? "Sound Detected" : "No Sound");
     json.set(pirPath.c_str(), motionDetected ? "Motion Detected" : "No Motion");
-    json.set(timePath.c_str(), String(timestamp));
+    json.set(timePath, String(timestamp));
 
     // Send data to Firebase
     Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, parentPath.c_str(), &json) ? "ok" : fbdo.errorReason().c_str());
@@ -228,6 +190,7 @@ void loop() {
     if (motionDetected) {
       sendCamAlert();
       Serial.println("Motion detected, alert sent to ESP32-CAM.");
+      
     }
 
     if (gasLevel > 2000 || flameDetected == 1) {
