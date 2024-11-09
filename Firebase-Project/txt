@@ -1,0 +1,9 @@
+   const firebaseConfig = {
+        apiKey: "AIzaSyB2ivesHz3wQM1cdIfNyAr2Sx3m-33Dopg",
+        authDomain: "ee4216-project.firebaseapp.com",
+        databaseURL: "https://ee4216-project-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "ee4216-project",
+        storageBucket: "ee4216-project.appspot.com",
+        messagingSenderId: "580720686300",
+        appId: "1:580720686300:web:dfbc58378828319cfd3019"
+      };

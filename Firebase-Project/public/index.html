@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ESP Datalogging Firebase App</title>
+
+    <!-- include Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.8.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.8.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.8.1/firebase-database.js"></script>
+
+    <script>
+      // Replace with your app config object
+      const firebaseConfig = {
+        apiKey: "AIzaSyB2ivesHz3wQM1cdIfNyAr2Sx3m-33Dopg",
+        authDomain: "ee4216-project.firebaseapp.com",
+        databaseURL: "https://ee4216-project-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "ee4216-project",
+        storageBucket: "ee4216-project.appspot.com",
+        messagingSenderId: "580720686300",
+        appId: "1:580720686300:web:dfbc58378828319cfd3019"
+      };
+
+      // Initialize firebase
+      firebase.initializeApp(firebaseConfig);
+
+      // Make auth and database references
+      const auth = firebase.auth();
+      const db = firebase.database();
+    </script>
+
+    <!-- include Highcharts JS -->
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" type="text/css" href="style.css">
+  </head>
+
+  <body>
+    <div class="topnav">
+      <h1>Smart Home Environmental Monitoring <i class="fas fa-clipboard-list"></i></h1>
+    </div>
+
+    <div id="authentication-bar" style="display: none;">
+      <p><span id="authentication-status">User logged in</span>
+        <span id="user-details">USEREMAIL</span>
+        <a href="/" id="logout-link">(logout)</a>
+      </p>
+    </div>
+
+    <form id="login-form" style="display: none;">
+      <div class="form-elements-container">
+        <label for="input-email"><b>Email</b></label>
+        <input type="text" placeholder="Enter Email" id="input-email" required>
+        <label for="input-password"><b>Password</b></label>
+        <input type="password" placeholder="Enter Password" id="input-password" required>
+        <button type="submit" id="login-button">Login</button>
+        <p id="error-message" style="color:red;"></p>
+      </div>
+    </form>
+
+    <div class="content" id="content-sign-in" style="display: none;">
+      <p><span class="date-time">Last update: <span id="lastUpdate"></span></span></p>
+      <p>
+        Cards: <input type="checkbox" id="cards-checkbox" name="cards-checkbox" checked>
+        Charts: <input type="checkbox" id="charts-checkbox" name="charts-checkbox">
+      </p>
+
+      <div id="cards-div">
+        <div class="cards">
+          <div class="card">
+            <p><i class="fas fa-thermometer-half" style="color:#059e8a;"></i> TEMPERATURE</p>
+            <p><span class="reading"><span id="temp"></span> &deg;C</span></p>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-tint" style="color:#00add6;"></i> HUMIDITY</p>
+            <p><span class="reading"><span id="hum"></span> &percnt;</span></p>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-wind" style="color:#FF6347;"></i> GAS LEVEL</p>
+            <p><span class="reading"><span id="gas"></span></p>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-fire" style="color:#FF4500;"></i> FLAME DETECTION</p>
+            <p><span class="reading" id="flame"></span></p>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-microphone-alt" style="color:#32CD32;"></i> SOUND DETECTION</p>
+            <p><span class="reading" id="sound"></span></p>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-running" style="color:#FFD700;"></i> MOTION DETECTION</p>
+            <p><span class="reading" id="pir"></span></p>
+          </div>
+        </div>
+      </div>
+
+      <div id="charts-div" style="display:none">
+        <div>
+          <p> Number of readings: <input type="number" id="charts-range"></p>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <p><i class="fas fa-thermometer-half" style="color:#059e8a;"></i> TEMPERATURE CHART</p>
+            <div id="chart-temperature" class="chart-container"></div>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-tint" style="color:#00add6;"></i> HUMIDITY CHART</p>
+            <div id="chart-humidity" class="chart-container"></div>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-wind" style="color:#FF6347;"></i> GAS LEVEL CHART</p>
+            <div id="chart-gas" class="chart-container"></div>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-fire" style="color:#FF4500;"></i> FLAME DETECTION CHART</p>
+            <div id="chart-flame" class="chart-container"></div>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-microphone-alt" style="color:#32CD32;"></i> SOUND DETECTION CHART</p>
+            <div id="chart-sound" class="chart-container"></div>
+          </div>
+          <div class="card">
+            <p><i class="fas fa-running" style="color:#FFD700;"></i> MOTION DETECTION CHART</p>
+            <div id="chart-pir" class="chart-container"></div>
+          </div>
+        </div>
+      </div>
+
+      <p>
+        <button id="view-data-button">View all data</button>
+        <button id="hide-data-button" style="display:none;">Hide data</button>
+        <button id="delete-button" class="deletebtn">Delete data</button>
+      </p>
+
+      <div id="delete-modal" class="modal" style="display:none">
+        <span onclick="document.getElementById('delete-modal').style.display='none'" class="close" title="Close Modal">×</span>
+        <form id="delete-data-form" class="modal-content" action="/">
+          <div class="container">
+            <h1>Delete Data</h1>
+            <p>Are you sure you want to delete all data from the database?</p>
+            <div class="clearfix">
+              <button type="button" onclick="document.getElementById('delete-modal').style.display='none'" class="cancelbtn">Cancel</button>
+              <button type="submit" onclick="document.getElementById('delete-modal').style.display='none'" class="deletebtn">Delete</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="cards">
+        <div class="card" id="table-container" style="display:none;">
+          <table id="readings-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Temp (ºC)</th>
+                <th>Hum (%)</th>
+                <th>Gas Level</th>
+                <th>Flame Detection</th>
+                <th>Sound Detection</th>
+                <th>Motion Detection</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+          <p><button id="load-data" style="display:none;">More results...</button></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- INCLUDE JS FILES -->
+    <script src="scripts/auth.js"></script>
+    <script src="scripts/charts-definition.js"></script>
+    <!-- <script src="scripts/gauges-definition.js"></script> -->
+    <script src="scripts/index.js"></script>
+  </body>
+</html>
